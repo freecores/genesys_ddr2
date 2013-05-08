@@ -31,7 +31,7 @@
 // subject only to applicable laws and regulations governing
 // limitations on product liability.
 //
-// Copyright 2006, 2007, 2008 Xilinx, Inc.
+// Copyright 2006, 2007 Xilinx, Inc.
 // All rights reserved.
 //
 // This disclaimer and copyright notice must be retained as part
@@ -42,7 +42,7 @@
 // /___/  \  /    Vendor: Xilinx
 // \   \   \/     Version: 3.6.1
 //  \   \         Application: MIG
-//  /   /         Filename: ddr2_tb_test_addr_gen.v
+//  /   /         Filename: ddr2_tb_test_gen.v
 // /___/   /\     Date Last Modified: $Date: 2010/11/26 18:26:02 $
 // \   \  /  \    Date Created: Fri Sep 01 2006
 //  \___\/\___\
@@ -50,89 +50,79 @@
 //Device: Virtex-5
 //Design Name: DDR2
 //Purpose:
-//   The address for the memory and the various user commands can be given
-//   through this module. It instantiates the block RAM which stores all the
-//   information in particular sequence. The data stored should be in a
-//   sequence starting from LSB:
-//      column address, row address, bank address, commands.
+//   This module instantiates the addr_gen and the data_gen modules. It takes
+//   the user data stored in internal FIFOs and gives the data that is to be
+//   compared with the read data
 //Reference:
 //Revision History:
 //*****************************************************************************
 
 `timescale 1ns/1ps
 
-module ddr2_tb_test_addr_gen #
+module ddr2_tb_test_gen #
   (
-   // Following parameters are for 72-bit RDIMM design (for ML561 Reference
-   // board design). Actual values may be different. Actual parameters values
+   // Following parameters are for 72-bit RDIMM design (for ML561 Reference 
+   // board design). Actual values may be different. Actual parameters values 
    // are passed from design top module MEMCtrl module. Please refer to
    // the MEMCtrl module for actual values.
-   parameter BANK_WIDTH = 2,
-   parameter COL_WIDTH  = 10,
-   parameter ROW_WIDTH  = 14
+   parameter BANK_WIDTH    = 2,
+   parameter COL_WIDTH     = 10,
+   parameter DM_WIDTH      = 9,
+   parameter DQ_WIDTH      = 72,
+   parameter APPDATA_WIDTH = 144,
+   parameter ECC_ENABLE    = 0,
+   parameter ROW_WIDTH     = 14
    )
   (
-   input             clk,
-   input             rst,
-   input             wr_addr_en,
-	input 			   rd_op,
-   input	  [30:0]		bus_if_addr,
-	output  [2:0]  	app_af_cmd,
-   output  [30:0] 	app_af_addr,
-   output reg        app_af_wren
+   input                                  clk,
+   input                                  rst,
+   input                                  wr_addr_en,
+   input                                  wr_data_en,
+   input                                  rd_data_valid,
+   output                                 app_af_wren,
+   output [2:0]                           app_af_cmd,
+   output [30:0]                          app_af_addr,
+   output                                 app_wdf_wren,
+   output [APPDATA_WIDTH-1:0]             app_wdf_data,
+   output [(APPDATA_WIDTH/8)-1:0]         app_wdf_mask_data,
+   output [APPDATA_WIDTH-1:0]             app_cmp_data
    );
 
-  reg             wr_addr_en_r1;
-  reg [2:0]       af_cmd_r;//, af_cmd_r0, af_cmd_r1;
-  reg             af_wren_r;
-  reg             rst_r
-                  /* synthesis syn_preserve = 1 */;
-  reg             rst_r1
-                  /* synthesis syn_maxfan = 10 */;
-  reg [5:0]       wr_addr_r;//wr_addr_cnt;
-  reg             wr_addr_en_r0;
+  //***************************************************************************
 
-  // XST attributes for local reset "tree"
-  // synthesis attribute shreg_extract of rst_r is "no";
-  // synthesis attribute shreg_extract of rst_r1 is "no";
-  // synthesis attribute equivalent_register_removal of rst_r is "no"
+  ddr2_tb_test_addr_gen #
+    (
+     .BANK_WIDTH (BANK_WIDTH),
+     .COL_WIDTH  (COL_WIDTH),
+     .ROW_WIDTH  (ROW_WIDTH)
+     )
+    u_addr_gen
+      (
+       .clk         (clk),
+       .rst         (rst),
+       .wr_addr_en  (wr_addr_en),
+       .app_af_cmd  (app_af_cmd),
+       .app_af_addr (app_af_addr),
+       .app_af_wren (app_af_wren)
+       );
 
-  //*****************************************************************
-
-  // local reset "tree" for controller logic only. Create this to ease timing
-  // on reset path. Prohibit equivalent register removal on RST_R to prevent
-  // "sharing" with other local reset trees (caution: make sure global fanout
-  // limit is set to larger than fanout on RST_R, otherwise SLICES will be
-  // used for fanout control on RST_R.
-  always @(posedge clk) begin
-    rst_r  <= rst;
-    rst_r1 <= rst_r;
-  end
-
-
-  // register backend enables / FIFO enables
-  // write enable for Command/Address FIFO is generated 1 CC after WR_ADDR_EN
-  always @(posedge clk)
-    if (rst_r1) begin
-      app_af_wren   <= 1'b0;
-    end else begin
-      app_af_wren   <= wr_addr_en;
-    end
-
-  always @ (posedge clk)
-    if (rst_r1)
-      wr_addr_r <= 0;
-    else if (wr_addr_en && (rd_op == 1'b0))
-      wr_addr_r <= bus_if_addr;  
-
-	assign app_af_addr = wr_addr_r;
-	assign app_af_cmd = af_cmd_r;
-	
-	always @ (posedge clk)
-	begin
-		af_cmd_r  <= 0;
-		if (rd_op)
-			af_cmd_r <= 3'b001;
-	end
+  ddr2_tb_test_data_gen #
+    (
+     .DM_WIDTH      (DM_WIDTH),
+     .DQ_WIDTH      (DQ_WIDTH),
+     .APPDATA_WIDTH (APPDATA_WIDTH),
+     .ECC_ENABLE    (ECC_ENABLE)
+     )
+    u_data_gen
+      (
+       .clk               (clk),
+       .rst               (rst),
+       .wr_data_en        (wr_data_en),
+       .rd_data_valid     (rd_data_valid),
+       .app_wdf_wren      (app_wdf_wren),
+       .app_wdf_data      (app_wdf_data),
+       .app_wdf_mask_data (app_wdf_mask_data),
+       .app_cmp_data      (app_cmp_data)
+       );
 
 endmodule

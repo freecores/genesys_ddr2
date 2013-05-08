@@ -37,7 +37,7 @@ module debounceRst(
 	 wire 							async_rst, PLLRst, rst_edge, start_up_rst;
 	 
 	 
-	// --4-bit Shift Register For resetting the DCM on startup (Xilinx Answer Record: 14425)
+	// --4-bit Shift Register For resetting the PLL
 	//--Asserts Start_Up_Rst for 4 clock periods
 
 	SRL16E #(
@@ -65,8 +65,8 @@ module debounceRst(
 	 
 	//----------------------------------------------------------------------------------
 	//-- Reset with take-off and landing
-	//-- delay 95 cc = RST_SYNC_NUM - 4 reset
-	//-- then keep it active for 3 cc (as long as one of RstQ(RST_SYNC_NUM-2), RstQ(RST_SYNC_NUM-3) or RstQ(RST_SYNC_NUM-4) is 0)
+	//-- delay 95 cc = DELAY_CC - 4 reset
+	//-- then keep it active for 3 cc (as long as one of rst_debounce_delay_loop[DELAY_CC-2], rst_debounce_delay_loop[DELAY_CC-3] or rst_debounce_delay_loop[DELAY_CC-4] is 0)
 	//----------------------------------------------------------------------------------	
 	 always @(posedge clk)
 	 begin
@@ -79,11 +79,11 @@ module debounceRst(
 	
 	assign int_rst =  ~PLLLocked;
 	
-	//decrement counter for 100 cc then RstD(RstD'high) becomes 0
+	//decrement counter for 100 cc then rst_cnt_delay[BITS_DELAY_CC-1] becomes 0
 	always @(posedge clk)
 	begin 
 		if (int_rst)
-			rst_cnt_delay <= 228;//DELAY_CC + {1'b1, {(BITS_DELAY_CC-2){1'b0}}};//{1'b1, (BITS_DELAY_CC-1)'dDELAY_CC}; 
+			rst_cnt_delay <= 228;//DELAY_CC + {1'b1, {(BITS_DELAY_CC-2){1'b0}}};
 		else 
 			if (rst_cnt_delay[BITS_DELAY_CC-1])
 				rst_cnt_delay <= rst_cnt_delay - 1;
